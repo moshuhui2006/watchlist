@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1677ff">
+<meta name="description" content="动漫追剧清单管理，支持文件夹分类、多季信息记录、心动指数评分">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>追剧清单</title>
+<style>
+  :root {
+    --primary: #1677ff;
+    --primary-light: #e6f4ff;
+    --primary-dark: #0958d9;
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --text: #1f2937;
+    --text-secondary: #6b7280;
+    --border: #e5e7eb;
+    --danger: #ff4d4f;
+    --success: #52c41a;
+    --shadow: 0 2px 8px rgba(0,0,0,0.06);
+    --shadow-lg: 0 4px 16px rgba(22,119,255,0.12);
+    --radius: 12px;
+    --rating-color: #ffb400;
+    --icon-scale: 1;
+    --font-family: -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { font-size:15px; }
+  html, body { height:100%; background:var(--bg); color:var(--text); overflow-x:hidden; }
+  body { display:flex; flex-direction:column; min-height:100vh; font-family:var(--font-family); font-size:1rem; }
+
+  /* ===== 页面切换 ===== */
+  .page { display:none; flex:1; flex-direction:column; min-height:100vh; animation:fadeIn .25s ease; }
+  .page.active { display:flex; }
+  @keyframes fadeIn { from{opacity:0; transform:translateX(8px);} to{opacity:1; transform:translateX(0);} }
+
+  /* ===== 顶部导航栏 ===== */
+  .navbar { position:sticky; top:0; z-index:100; background:var(--primary); color:#fff; padding:env(safe-area-inset-top,0) 0 0; box-shadow:0 2px 8px rgba(22,119,255,0.2); }
+  .navbar-inner { display:flex; align-items:center; justify-content:space-between; height:52px; padding:0 16px; }
+  .navbar-title { font-size:1.2rem; font-weight:600; flex:1; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .navbar-btn { background:none; border:none; color:#fff; font-size:1rem; cursor:pointer; padding:6px 10px; border-radius:8px; display:flex; align-items:center; gap:4px; min-width:44px; justify-content:center; }
+  .navbar-btn:active { background:rgba(255,255,255,0.15); }
+  .navbar-btn.icon-only { font-size:1.333rem; padding:6px 8px; }
+  .navbar-left, .navbar-right { display:flex; align-items:center; gap:4px; min-width:60px; }
+  .navbar-right { justify-content:flex-end; }
+
+  /* ===== 内容区 ===== */
+  .content { flex:1; padding:16px; padding-bottom:calc(80px + env(safe-area-inset-bottom,0)); overflow-y:auto; }
+
+  /* ===== 空状态 ===== */
+  .empty { text-align:center; padding:60px 20px; color:var(--text-secondary); }
+  .empty-icon { font-size:3.733rem; margin-bottom:16px; opacity:0.5; }
+  .empty-text { font-size:1rem; line-height:1.6; }
+  .empty-hint { font-size:0.867rem; margin-top:8px; opacity:0.7; }
+
+  /* ===== 文件夹卡片 ===== */
+  .folder-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  .folder-card { background:var(--card); border-radius:var(--radius); padding:20px 16px; box-shadow:var(--shadow); cursor:pointer; transition:all .2s; position:relative; border:2px solid transparent; }
+  .folder-card:active { transform:scale(0.97); box-shadow:var(--shadow-lg); border-color:var(--primary); }
+  .folder-card.selecting { border-color:var(--danger); }
+  .folder-icon { font-size:2.667rem; margin-bottom:10px; }
+  .folder-name { font-size:1.067rem; font-weight:600; margin-bottom:6px; word-break:break-all; }
+  .folder-meta { font-size:0.8rem; color:var(--text-secondary); display:flex; flex-direction:column; gap:2px; }
+  .folder-delete-btn { position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:50%; background:var(--danger); color:#fff; border:none; font-size:0.933rem; line-height:1; cursor:pointer; display:none; align-items:center; justify-content:center; }
+  .folder-card.selecting .folder-delete-btn { display:flex; }
+
+  /* ===== 排序栏 ===== */
+  .sort-bar { display:flex; align-items:center; gap:8px; margin-bottom:14px; font-size:0.867rem; color:var(--text-secondary); }
+  .sort-bar label { white-space:nowrap; }
+  .sort-select { flex:1; padding:7px 10px; border:1px solid var(--border); border-radius:8px; background:var(--card); font-size:0.867rem; color:var(--text); outline:none; }
+  .sort-select:focus { border-color:var(--primary); }
+
+  /* ===== 动漫信息条 ===== */
+  .anime-list { display:flex; flex-direction:column; gap:12px; }
+  .anime-item { background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:12px; display:flex; gap:12px; position:relative; transition:all .2s; border:2px solid transparent; }
+  .anime-item:active { transform:scale(0.99); }
+  .anime-item.selecting { border-color:var(--danger); }
+  .anime-left { width:110px; flex-shrink:0; display:flex; flex-direction:column; gap:6px; }
+  .anime-image-box { width:110px; height:110px; border-radius:10px; background:var(--primary-light); overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:2.4rem; }
+  .anime-image-box img { width:100%; height:100%; object-fit:cover; }
+  .anime-name-box { font-size:0.867rem; font-weight:600; text-align:center; word-break:break-all; line-height:1.3; min-height:34px; display:flex; align-items:center; justify-content:center; }
+  .anime-right { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+  .season-row { background:var(--bg); border-radius:8px; padding:8px 10px; font-size:0.8rem; line-height:1.5; display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center; }
+  .season-tag { background:var(--primary); color:#fff; padding:2px 8px; border-radius:10px; font-size:0.733rem; font-weight:600; white-space:nowrap; }
+  .season-info { color:var(--text-secondary); white-space:nowrap; }
+  .season-info strong { color:var(--text); font-weight:600; }
+  .season-hours { color:var(--primary-dark); font-weight:600; white-space:nowrap; }
+  .anime-delete-btn { position:absolute; top:6px; right:6px; width:24px; height:24px; border-radius:50%; background:var(--danger); color:#fff; border:none; font-size:0.933rem; line-height:1; cursor:pointer; display:none; align-items:center; justify-content:center; z-index:2; }
+  .anime-item.selecting .anime-delete-btn { display:flex; }
+
+  /* ===== 底部操作栏 ===== */
+  .bottom-bar { position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--border); padding:10px 16px calc(10px + env(safe-area-inset-bottom,0)); display:flex; gap:10px; z-index:90; box-shadow:0 -2px 8px rgba(0,0,0,0.04); }
+  .bottom-bar.hidden { display:none; }
+  .btn { flex:1; padding:12px; border:none; border-radius:10px; font-size:1rem; font-weight:600; cursor:pointer; transition:all .15s; display:flex; align-items:center; justify-content:center; gap:6px; }
+  .btn:active { transform:scale(0.97); }
+  .btn-primary { background:var(--primary); color:#fff; }
+  .btn-primary:active { background:var(--primary-dark); }
+  .btn-danger { background:var(--danger); color:#fff; }
+  .btn-outline { background:var(--card); color:var(--primary); border:1.5px solid var(--primary); }
+  .btn-secondary { background:var(--bg); color:var(--text); border:1px solid var(--border); }
+
+  /* ===== 弹窗 ===== */
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; animation:fadeIn .2s; }
+  .modal-overlay.active { display:flex; }
+  .modal { background:var(--card); border-radius:16px; width:100%; max-width:380px; max-height:85vh; overflow-y:auto; animation:modalIn .25s ease; }
+  @keyframes modalIn { from{opacity:0; transform:scale(0.9) translateY(10px);} to{opacity:1; transform:scale(1) translateY(0);} }
+  .modal-header { padding:18px 20px 12px; font-size:1.133rem; font-weight:600; border-bottom:1px solid var(--border); }
+  .modal-body { padding:16px 20px; }
+  .modal-footer { padding:12px 20px 18px; display:flex; gap:10px; }
+  .form-group { margin-bottom:14px; }
+  .form-group:last-child { margin-bottom:0; }
+  .form-label { display:block; font-size:0.867rem; font-weight:600; margin-bottom:6px; color:var(--text); }
+  .form-input { width:100%; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; font-size:0.933rem; outline:none; transition:border-color .15s; background:var(--card); color:var(--text); }
+  .form-input:focus { border-color:var(--primary); }
+  .form-textarea { width:100%; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; font-size:0.867rem; outline:none; resize:vertical; min-height:80px; font-family:inherit; line-height:1.5; background:var(--card); color:var(--text); }
+  .form-textarea:focus { border-color:var(--primary); }
+  .form-hint { font-size:0.733rem; color:var(--text-secondary); margin-top:4px; line-height:1.4; }
+
+  /* ===== 编辑页面 ===== */
+  .edit-content { flex:1; padding:16px; padding-bottom:calc(90px + env(safe-area-inset-bottom,0)); overflow-y:auto; }
+  .edit-section { background:var(--card); border-radius:var(--radius); padding:16px; margin-bottom:14px; box-shadow:var(--shadow); }
+  .edit-section-title { font-size:1rem; font-weight:600; margin-bottom:12px; color:var(--primary-dark); display:flex; align-items:center; gap:6px; }
+  .edit-left-box { display:flex; flex-direction:column; align-items:center; gap:12px; }
+  .edit-image-preview { width:140px; height:140px; border-radius:12px; background:var(--primary-light); overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:3.2rem; border:2px dashed var(--primary); }
+  .edit-image-preview img { width:100%; height:100%; object-fit:cover; }
+  .image-actions { display:flex; gap:8px; width:100%; }
+  .image-actions .btn { padding:8px; font-size:0.867rem; }
+
+  /* 季信息编辑行 */
+  .season-edit-list { display:flex; flex-direction:column; gap:8px; }
+  .season-edit-row { background:var(--bg); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px; position:relative; }
+  .season-edit-row-header { display:flex; align-items:center; justify-content:space-between; }
+  .season-edit-row-num { font-size:0.867rem; font-weight:600; color:var(--primary); }
+  .season-remove-btn { background:var(--danger); color:#fff; border:none; width:22px; height:22px; border-radius:50%; font-size:0.8rem; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; }
+  .season-fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .season-field { display:flex; flex-direction:column; gap:3px; }
+  .season-field label { font-size:0.733rem; color:var(--text-secondary); }
+  .season-field input { width:100%; padding:7px 9px; border:1px solid var(--border); border-radius:7px; font-size:0.867rem; outline:none; background:var(--card); color:var(--text); }
+  .season-field input:focus { border-color:var(--primary); }
+  .add-season-btn { width:100%; padding:10px; border:1.5px dashed var(--primary); border-radius:10px; background:var(--primary-light); color:var(--primary); font-size:0.933rem; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px; }
+  .add-season-btn:active { background:#d0e8ff; }
+
+  /* 文字导入区 */
+  .import-box { margin-top:12px; }
+  .import-result { margin-top:8px; padding:10px; background:var(--primary-light); border-radius:8px; font-size:0.8rem; color:var(--primary-dark); display:none; line-height:1.5; }
+  .import-result.show { display:block; }
+
+  /* Toast */
+  .toast { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(0,0,0,0.75); color:#fff; padding:12px 24px; border-radius:10px; font-size:0.933rem; z-index:999; display:none; animation:toastIn .2s; max-width:80%; text-align:center; }
+  .toast.show { display:block; }
+  @keyframes toastIn { from{opacity:0; transform:translate(-50%,-40%);} to{opacity:1; transform:translate(-50%,-50%);} }
+
+  /* 管理模式提示 */
+  .manage-tip { background:var(--primary-light); color:var(--primary-dark); padding:8px 16px; font-size:0.8rem; text-align:center; display:none; }
+  .manage-tip.show { display:block; }
+
+  /* 统计条 */
+  .stats-bar { display:flex; gap:8px; margin-bottom:14px; }
+  .stat-card { flex:1; background:var(--card); border-radius:10px; padding:10px; text-align:center; box-shadow:var(--shadow); }
+  .stat-num { font-size:1.333rem; font-weight:700; color:var(--primary); }
+  .stat-label { font-size:0.733rem; color:var(--text-secondary); margin-top:2px; }
+
+  /* ===== 星级评分 ===== */
+  .rating-display { display:flex; gap:2px; justify-content:center; margin-top:4px; }
+  .rating-display .star { font-size:calc(14px * var(--icon-scale)); color:#ddd; }
+  .rating-display .star.filled { color:var(--rating-color); }
+  .rating-input { display:flex; gap:6px; justify-content:center; }
+  .rating-input .star { font-size:calc(28px * var(--icon-scale)); color:#ddd; cursor:pointer; transition:transform .1s; line-height:1; }
+  .rating-input .star.filled { color:var(--rating-color); }
+  .rating-input .star:active { transform:scale(1.2); }
+
+  /* ===== 设置页面 ===== */
+  .setting-options { display:flex; gap:8px; flex-wrap:wrap; }
+  .setting-option { padding:8px 16px; border:1.5px solid var(--border); border-radius:10px; font-size:0.933rem; cursor:pointer; background:var(--card); transition:all .15s; display:flex; align-items:center; gap:4px; }
+  .setting-option:active { transform:scale(0.95); }
+  .setting-option.selected { border-color:var(--primary); background:var(--primary-light); color:var(--primary-dark); font-weight:600; }
+  .setting-desc { font-size:0.8rem; color:var(--text-secondary); margin-top:8px; line-height:1.5; }
+
+  /* ===== 纯色封面选择器 ===== */
+  .color-picker { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; justify-content:center; }
+  .color-swatch { width:32px; height:32px; border-radius:50%; cursor:pointer; border:3px solid transparent; transition:all .15s; box-shadow:0 1px 4px rgba(0,0,0,0.15); }
+  .color-swatch:active { transform:scale(0.9); }
+  .color-swatch.selected { border-color:var(--primary); transform:scale(1.1); }
+  .color-label { font-size:0.8rem; color:var(--text-secondary); text-align:center; margin-top:8px; }
+</style>
+</head>
+<body>
+
+<!-- ==================== 页面1：文件夹列表 ==================== -->
+<div id="page-folders" class="page active">
+  <div class="navbar">
+    <div class="navbar-inner">
+      <div class="navbar-left">
+        <button class="navbar-btn icon-only" onclick="showSettings()">⚙</button>
+      </div>
+      <div class="navbar-title">追剧清单</div>
+      <div class="navbar-right">
+        <button class="navbar-btn icon-only" onclick="toggleFolderManage()" id="folderManageBtn">✎</button>
+      </div>
+    </div>
+  </div>
+  <div class="manage-tip" id="folderManageTip">管理模式：点击文件夹上的 × 删除</div>
+  <div class="content">
+    <div class="sort-bar">
+      <label>排序：</label>
+      <select class="sort-select" id="folderSort" onchange="renderFolders()">
+        <option value="modified-desc">修改时间（最新）</option>
+        <option value="modified-asc">修改时间（最早）</option>
+        <option value="size-desc">数量（多→少）</option>
+        <option value="size-asc">数量（少→多）</option>
+        <option value="name-asc">名称（A-Z）</option>
+      </select>
+    </div>
+    <div class="folder-grid" id="folderGrid"></div>
+    <div class="empty" id="folderEmpty" style="display:none;">
+      <div class="empty-icon">📁</div>
+      <div class="empty-text">还没有文件夹</div>
+      <div class="empty-hint">点击下方「新建文件夹」开始整理你的追剧清单</div>
+    </div>
+  </div>
+  <div class="bottom-bar">
+    <button class="btn btn-primary" onclick="showNewFolderModal()">＋ 新建文件夹</button>
+  </div>
+</div>
+
+<!-- ==================== 页面2：动漫列表 ==================== -->
+<div id="page-animes" class="page">
+  <div class="navbar">
+    <div class="navbar-inner">
+      <div class="navbar-left">
+        <button class="navbar-btn" onclick="goFolders()">‹ 返回</button>
+      </div>
+      <div class="navbar-title" id="animePageTitle">待看动漫</div>
+      <div class="navbar-right">
+        <button class="navbar-btn icon-only" onclick="showAddAnimePage()">＋</button>
+        <button class="navbar-btn icon-only" onclick="toggleAnimeManage()" id="animeManageBtn">✎</button>
+      </div>
+    </div>
+  </div>
+  <div class="manage-tip" id="animeManageTip">管理模式：点击条目上的 × 删除</div>
+  <div class="content">
+    <div class="sort-bar">
+      <label>排序：</label>
+      <select class="sort-select" id="animeSort" onchange="renderAnimes()">
+        <option value="modified-desc">修改时间（最新）</option>
+        <option value="modified-asc">修改时间（最早）</option>
+        <option value="hours-desc">总时长（多→少）</option>
+        <option value="hours-asc">总时长（少→多）</option>
+        <option value="rating-desc">心动指数（高→低）</option>
+        <option value="rating-asc">心动指数（低→高）</option>
+      </select>
+    </div>
+    <div class="stats-bar" id="animeStats"></div>
+    <div class="anime-list" id="animeList"></div>
+    <div class="empty" id="animeEmpty" style="display:none;">
+      <div class="empty-icon">🎬</div>
+      <div class="empty-text">这个文件夹还是空的</div>
+      <div class="empty-hint">点击右上角 ＋ 添加待看动漫<br>支持粘贴文字自动识别季信息</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 页面3：添加/编辑动漫 ==================== -->
+<div id="page-edit" class="page">
+  <div class="navbar">
+    <div class="navbar-inner">
+      <div class="navbar-left">
+        <button class="navbar-btn" onclick="goAnimes()">‹ 返回</button>
+      </div>
+      <div class="navbar-title" id="editPageTitle">添加动漫</div>
+      <div class="navbar-right"></div>
+    </div>
+  </div>
+  <div class="edit-content">
+    <!-- 左侧：正方形大框（图片+文字） -->
+    <div class="edit-section">
+      <div class="edit-section-title">🖼️ 封面与名称</div>
+      <div class="edit-left-box">
+        <div class="edit-image-preview" id="editImagePreview">🎨</div>
+        <div class="image-actions">
+          <button class="btn btn-outline" onclick="document.getElementById('imageUpload').click()">上传图片</button>
+          <button class="btn btn-secondary" onclick="clearImage()">清除</button>
+        </div>
+        <input type="file" id="imageUpload" accept="image/*" style="display:none;" onchange="handleImageUpload(event)">
+        <div class="form-group" style="width:100%; margin-bottom:0;">
+          <label class="form-label">图片URL（可选）</label>
+          <input type="text" class="form-input" id="imageUrlInput" placeholder="粘贴图片链接，或直接上传" oninput="previewImageFromUrl()">
+        </div>
+        <div style="width:100%;">
+          <div class="color-label">或选择纯色封面</div>
+          <div class="color-picker" id="colorPicker"></div>
+        </div>
+        <div class="form-group" style="width:100%; margin-bottom:0;">
+          <label class="form-label">动漫名称 <span style="color:var(--danger);">*</span></label>
+          <input type="text" class="form-input" id="animeNameInput" placeholder="例如：进击的巨人">
+        </div>
+        <div style="width:100%;">
+          <div class="form-label" style="text-align:center; margin-bottom:6px;">心动指数</div>
+          <div class="rating-input" id="ratingInput"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧：n行季信息编辑 -->
+    <div class="edit-section">
+      <div class="edit-section-title">📺 季信息</div>
+      <div class="season-edit-list" id="seasonEditList"></div>
+      <button class="add-season-btn" style="margin-top:10px;" onclick="addSeasonRow()">＋ 添加一季</button>
+    </div>
+
+    <!-- 文字导入 -->
+    <div class="edit-section">
+      <div class="edit-section-title">📝 文字快速导入</div>
+      <div class="form-group">
+        <textarea class="form-textarea" id="importText" placeholder="粘贴动漫信息，例如：&#10;进击的巨人 第一季 25集 24分钟&#10;第二季 12集 24分钟&#10;第三季 22集 24分钟&#10;&#10;系统会自动识别季数、集数、每集分钟数"></textarea>
+        <div class="form-hint">支持格式：第X季 / 第X期 / X季，X集 / 共X集 / 全X集，X分钟 / 每集X分钟</div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;" onclick="parseImportText()">🔍 识别并导入</button>
+      <div class="import-result" id="importResult"></div>
+    </div>
+  </div>
+  <div class="bottom-bar">
+    <button class="btn btn-secondary" onclick="goAnimes()">取消</button>
+    <button class="btn btn-primary" onclick="saveAnime()">💾 保存</button>
+  </div>
+</div>
+
+<!-- ==================== 页面4：设置 ==================== -->
+<div id="page-settings" class="page">
+  <div class="navbar">
+    <div class="navbar-inner">
+      <div class="navbar-left">
+        <button class="navbar-btn" onclick="goFolders()">‹ 返回</button>
+      </div>
+      <div class="navbar-title">设置</div>
+      <div class="navbar-right"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="edit-section">
+      <div class="edit-section-title">🔤 文字大小</div>
+      <div class="setting-options" id="fontSizeOptions"></div>
+      <div class="setting-desc">标准字号快速选择：</div>
+      <div class="setting-options" id="fontSizeQuick" style="margin-top:6px;"></div>
+    </div>
+    <div class="edit-section">
+      <div class="edit-section-title">🔠 字体</div>
+      <div class="setting-options" id="fontFamilyOptions"></div>
+    </div>
+    <div class="edit-section">
+      <div class="edit-section-title">📐 图标大小</div>
+      <div class="setting-options" id="iconSizeOptions"></div>
+    </div>
+    <div class="edit-section">
+      <div class="edit-section-title">🎨 主题色</div>
+      <div class="color-picker" id="themeColorPicker"></div>
+    </div>
+    <div class="edit-section">
+      <div class="edit-section-title">🌈 纯色封面色系</div>
+      <div class="setting-options" id="colorSchemeOptions"></div>
+      <div class="setting-desc">当前色系预览：</div>
+      <div class="color-picker" id="settingsColorPreview" style="margin-top:8px;"></div>
+    </div>
+    <div class="edit-section">
+      <div class="edit-section-title">✨ 评分图标</div>
+      <div class="setting-options" id="ratingIconOptions"></div>
+    </div>
+    <div class="edit-section">
+      <div class="edit-section-title">💫 评分图标颜色</div>
+      <div class="setting-desc">从当前封面色系中选择</div>
+      <div class="color-picker" id="ratingColorPicker" style="margin-top:10px;"></div>
+    </div>
+    <div class="edit-section" style="text-align:center;">
+      <button class="btn btn-outline" style="width:100%;" onclick="resetSettings()">↺ 恢复默认设置</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 新建文件夹弹窗 ==================== -->
+<div class="modal-overlay" id="newFolderModal">
+  <div class="modal">
+    <div class="modal-header">新建文件夹</div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">文件夹名称</label>
+        <input type="text" class="form-input" id="newFolderName" placeholder="例如：待看动漫" maxlength="20">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="hideNewFolderModal()">取消</button>
+      <button class="btn btn-primary" onclick="createFolder()">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ==================== 数据层 ====================
+const STORAGE_KEY = 'anime_watchlist_data';
+let state = { folders: [] };
+let currentFolderId = null;
+let editingAnimeId = null; // null=新增，非空=编辑
+let folderManageMode = false;
+let animeManageMode = false;
+let currentImage = ''; // base64或url或 color:#hex
+let currentRating = 0;
+
+// ===== 设置相关常量 =====
+const SETTINGS_KEY = 'anime_watchlist_settings';
+const DEFAULT_SETTINGS = {
+  fontSize: 15,
+  fontFamily: 'default',
+  iconSize: 1,
+  theme: 'blue',
+  colorScheme: 'classic',
+  ratingIcon: 'heart',
+  ratingColor: '#ffa94d'
+};
+let settings = { ...DEFAULT_SETTINGS };
+
+const FONT_RANGE = { min:9, max:42, step:1 };
+const ICON_RANGE = { min:0.7, max:1.5, step:0.05 };
+
+// 中文字号对应表
+const CN_FONT_SIZES = [
+  { name:'初号', px:42 }, { name:'小初', px:36 },
+  { name:'一号', px:26 }, { name:'小一', px:24 },
+  { name:'二号', px:22 }, { name:'小二', px:18 },
+  { name:'三号', px:16 }, { name:'小三', px:15 },
+  { name:'四号', px:14 }, { name:'小四', px:12 },
+  { name:'五号', px:10.5 }, { name:'小五', px:9 }
+];
+function getCnSizeName(px) {
+  const found = CN_FONT_SIZES.find(s => Math.abs(s.px - px) < 0.1);
+  return found ? found.name : null;
+}
+
+// 字体族
+const FONT_FAMILIES = [
+  { id:'default', name:'系统默认', css:'-apple-system,BlinkMacSystemFont,\'Segoe UI\',\'PingFang SC\',\'Hiragino Sans GB\',\'Microsoft YaHei\',sans-serif' },
+  { id:'yahei',   name:'微软雅黑', css:'\'Microsoft YaHei\',\'PingFang SC\',sans-serif' },
+  { id:'song',    name:'宋体',     css:'\'SimSun\',\'Songti SC\',serif' },
+  { id:'hei',     name:'黑体',     css:'\'SimHei\',\'Heiti SC\',sans-serif' },
+  { id:'kai',     name:'楷体',     css:'\'KaiTi\',\'Kaiti SC\',serif' },
+  { id:'fang',    name:'仿宋',     css:'\'FangSong\',\'STFangsong\',serif' },
+  { id:'mono',    name:'等宽',     css:'\'Consolas\',\'Monaco\',\'Courier New\',monospace' }
+];
+const THEME_COLORS = [
+  { id:'blue',  name:'蓝', primary:'#1677ff', light:'#e6f4ff', dark:'#0958d9' },
+  { id:'green', name:'绿', primary:'#52c41a', light:'#f6ffed', dark:'#389e0d' },
+  { id:'cyan',  name:'青', primary:'#13c2c2', light:'#e6fffb', dark:'#08979c' },
+  { id:'purple',name:'紫', primary:'#722ed1', light:'#f9f0ff', dark:'#531dab' },
+  { id:'orange',name:'橙', primary:'#fa8c16', light:'#fff7e6', dark:'#d46b08' },
+  { id:'pink',  name:'粉', primary:'#eb2f96', light:'#fff0f6', dark:'#c41d7f' },
+  { id:'red',   name:'红', primary:'#f5222d', light:'#fff1f0', dark:'#cf1322' }
+];
+const COLOR_SCHEMES = {
+  classic: { name:'经典', colors:['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#38d9a9','#4dabf7','#748ffc','#9775fa','#da77f2','#f783ac','#868e96','#495057'] },
+  morandi: { name:'莫兰迪', colors:['#b8a9a0','#c9b8a8','#d4c5b0','#a8b5a0','#9db5b0','#a0b5c9','#a8a8c9','#b5a0c9','#c9a0b8','#d4a5a5','#b0b0b0','#8a8a8a'] },
+  macaron: { name:'马卡龙', colors:['#ffb3ba','#ffdfba','#ffffba','#baffc9','#bae1ff','#c5baff','#e0baff','#ffbaff','#ffc0cb','#ffd1dc','#d4c5f9','#c9f0ff'] },
+  retro:   { name:'复古', colors:['#c0392b','#d35400','#f39c12','#27ae60','#16a085','#2980b9','#8e44ad','#a0522d','#cd853f','#7f8c8d','#34495e','#2c3e50'] },
+  fresh:   { name:'清新', colors:['#ff8a80','#ffd180','#ffff8d','#ccff90','#a7ffeb','#80d8ff','#82b1ff','#b388ff','#ea80fc','#ff80ab','#b0bec5','#78909c'] }
+};
+const RATING_ICONS = [
+  { id:'heart',   char:'♥', name:'爱心' },
+  { id:'smile',   char:'☺', name:'笑脸' },
+  { id:'star',    char:'★', name:'星星' },
+  { id:'moon',    char:'☽', name:'月亮' },
+  { id:'flower',  char:'✿', name:'花朵' },
+  { id:'diamond', char:'◆', name:'钻石' }
+];
+
+function getCoverColors() {
+  return (COLOR_SCHEMES[settings.colorScheme] || COLOR_SCHEMES.classic).colors;
+}
+function getRatingChar() {
+  return (RATING_ICONS.find(i=>i.id===settings.ratingIcon) || RATING_ICONS[0]).char;
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) state = JSON.parse(raw);
+  } catch(e) { state = { folders: [] }; }
+  if (!state.folders) state.folders = [];
+}
+
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2,6);
+}
+
+function getFolder(id) {
+  return state.folders.find(f => f.id === id);
+}
+
+function touchFolder(folder) {
+  folder.modifiedAt = Date.now();
+}
+
+// ==================== 页面导航 ====================
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+function goFolders() {
+  currentFolderId = null;
+  animeManageMode = false;
+  updateManageUI();
+  showPage('page-folders');
+  renderFolders();
+}
+
+function goAnimes() {
+  editingAnimeId = null;
+  showPage('page-animes');
+  renderAnimes();
+}
+
+function openFolder(folderId) {
+  if (folderManageMode) return;
+  currentFolderId = folderId;
+  const f = getFolder(folderId);
+  document.getElementById('animePageTitle').textContent = f.name;
+  animeManageMode = false;
+  updateManageUI();
+  showPage('page-animes');
+  renderAnimes();
+}
+
+// ==================== Toast ====================
+let toastTimer = null;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ==================== 页面1：文件夹 ====================
+function renderFolders() {
+  const grid = document.getElementById('folderGrid');
+  const empty = document.getElementById('folderEmpty');
+  const sortVal = document.getElementById('folderSort').value;
+
+  let folders = [...state.folders];
+  switch(sortVal) {
+    case 'modified-desc': folders.sort((a,b)=>b.modifiedAt-a.modifiedAt); break;
+    case 'modified-asc':  folders.sort((a,b)=>a.modifiedAt-b.modifiedAt); break;
+    case 'size-desc':     folders.sort((a,b)=>(b.items?.length||0)-(a.items?.length||0)); break;
+    case 'size-asc':      folders.sort((a,b)=>(a.items?.length||0)-(b.items?.length||0)); break;
+    case 'name-asc':      folders.sort((a,b)=>a.name.localeCompare(b.name,'zh')); break;
+  }
+
+  if (folders.length === 0) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  grid.innerHTML = folders.map(f => {
+    const animeCount = f.items?.length || 0;
+    let totalEps = 0;
+    (f.items||[]).forEach(item => (item.seasons||[]).forEach(s => totalEps += s.episodes||0));
+    const date = new Date(f.modifiedAt);
+    const dateStr = `${date.getMonth()+1}/${date.getDate()} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+    return `
+      <div class="folder-card ${folderManageMode?'selecting':''}" onclick="openFolder('${f.id}')">
+        ${folderManageMode ? `<button class="folder-delete-btn" onclick="event.stopPropagation();deleteFolder('${f.id}')">×</button>` : ''}
+        <div class="folder-icon">📁</div>
+        <div class="folder-name">${escapeHtml(f.name)}</div>
+        <div class="folder-meta">
+          <span>${animeCount} 部 · ${totalEps} 集</span>
+          <span>更新于 ${dateStr}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleFolderManage() {
+  folderManageMode = !folderManageMode;
+  updateManageUI();
+  renderFolders();
+}
+
+function updateManageUI() {
+  document.getElementById('folderManageTip').classList.toggle('show', folderManageMode);
+  document.getElementById('folderManageBtn').textContent = folderManageMode ? '✓' : '✎';
+  document.getElementById('animeManageTip').classList.toggle('show', animeManageMode);
+  document.getElementById('animeManageBtn').textContent = animeManageMode ? '✓' : '✎';
+}
+
+function showNewFolderModal() {
+  document.getElementById('newFolderName').value = '';
+  document.getElementById('newFolderModal').classList.add('active');
+  setTimeout(()=>document.getElementById('newFolderName').focus(), 100);
+}
+
+function hideNewFolderModal() {
+  document.getElementById('newFolderModal').classList.remove('active');
+}
+
+function createFolder() {
+  const name = document.getElementById('newFolderName').value.trim();
+  if (!name) { toast('请输入文件夹名称'); return; }
+  const now = Date.now();
+  state.folders.push({ id:uid(), name, createdAt:now, modifiedAt:now, items:[] });
+  saveData();
+  hideNewFolderModal();
+  renderFolders();
+  toast('文件夹已创建');
+}
+
+function deleteFolder(id) {
+  const f = getFolder(id);
+  if (!confirm(`确定删除文件夹「${f.name}」吗？里面的 ${f.items?.length||0} 部动漫也会被删除。`)) return;
+  state.folders = state.folders.filter(x => x.id !== id);
+  saveData();
+  renderFolders();
+  toast('已删除');
+}
+
+// ==================== 页面2：动漫列表 ====================
+function renderAnimes() {
+  const folder = getFolder(currentFolderId);
+  if (!folder) { goFolders(); return; }
+  const list = document.getElementById('animeList');
+  const empty = document.getElementById('animeEmpty');
+  const stats = document.getElementById('animeStats');
+
+  const items = folder.items || [];
+
+  // 排序
+  const sortVal = document.getElementById('animeSort').value;
+  let sorted = [...items];
+  const calcHours = item => (item.seasons||[]).reduce((sum,s)=>sum+(s.episodes||0)*(s.minutesPerEp||0)/60, 0);
+  switch(sortVal) {
+    case 'modified-desc': sorted.sort((a,b)=>(b.modifiedAt||b.createdAt||0)-(a.modifiedAt||a.createdAt||0)); break;
+    case 'modified-asc':  sorted.sort((a,b)=>(a.modifiedAt||a.createdAt||0)-(b.modifiedAt||b.createdAt||0)); break;
+    case 'hours-desc':    sorted.sort((a,b)=>calcHours(b)-calcHours(a)); break;
+    case 'hours-asc':     sorted.sort((a,b)=>calcHours(a)-calcHours(b)); break;
+    case 'rating-desc':   sorted.sort((a,b)=>(b.rating||0)-(a.rating||0)); break;
+    case 'rating-asc':    sorted.sort((a,b)=>(a.rating||0)-(b.rating||0)); break;
+  }
+
+  // 统计
+  let totalAnime = sorted.length;
+  let totalHours = 0;
+  sorted.forEach(item => { totalHours += calcHours(item); });
+  stats.innerHTML = `
+    <div class="stat-card"><div class="stat-num">${totalAnime}</div><div class="stat-label">部</div></div>
+    <div class="stat-card"><div class="stat-num">${totalHours.toFixed(1)}</div><div class="stat-label">总时长(h)</div></div>
+  `;
+
+  if (sorted.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  list.innerHTML = sorted.map(item => {
+    const seasonsHtml = (item.seasons||[]).map(s => {
+      const hours = ((s.episodes||0) * (s.minutesPerEp||0) / 60).toFixed(1);
+      return `
+        <div class="season-row">
+          <span class="season-tag">第${s.seasonNum}季</span>
+          <span class="season-info"><strong>${s.episodes}</strong>集</span>
+          <span class="season-info">每集<strong>${s.minutesPerEp}</strong>分钟</span>
+          <span class="season-hours">共${hours}h</span>
+        </div>
+      `;
+    }).join('');
+
+    const imgHtml = renderCoverImage(item.image);
+    const rating = item.rating || 0;
+    const rChar = getRatingChar();
+    const starsHtml = Array.from({length:5},(_,i)=>`<span class="star ${i<rating?'filled':''}">${rChar}</span>`).join('');
+
+    return `
+      <div class="anime-item ${animeManageMode?'selecting':''}" onclick="editAnime('${item.id}')">
+        ${animeManageMode ? `<button class="anime-delete-btn" onclick="event.stopPropagation();deleteAnime('${item.id}')">×</button>` : ''}
+        <div class="anime-left">
+          <div class="anime-image-box">${imgHtml}</div>
+          <div class="anime-name-box">${escapeHtml(item.name)}</div>
+          <div class="rating-display">${starsHtml}</div>
+        </div>
+        <div class="anime-right">
+          ${seasonsHtml || '<div class="season-row" style="color:var(--text-secondary);">暂无季信息</div>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleAnimeManage() {
+  animeManageMode = !animeManageMode;
+  updateManageUI();
+  renderAnimes();
+}
+
+function deleteAnime(id) {
+  const folder = getFolder(currentFolderId);
+  const item = folder.items.find(x => x.id === id);
+  if (!confirm(`确定删除「${item.name}」吗？`)) return;
+  folder.items = folder.items.filter(x => x.id !== id);
+  touchFolder(folder);
+  saveData();
+  renderAnimes();
+  toast('已删除');
+}
+
+// ==================== 页面3：添加/编辑动漫 ====================
+function showAddAnimePage() {
+  editingAnimeId = null;
+  currentImage = '';
+  currentRating = 0;
+  document.getElementById('editPageTitle').textContent = '添加动漫';
+  document.getElementById('animeNameInput').value = '';
+  document.getElementById('imageUrlInput').value = '';
+  document.getElementById('importText').value = '';
+  document.getElementById('importResult').classList.remove('show');
+  const preview = document.getElementById('editImagePreview');
+  preview.innerHTML = '🎨';
+  preview.style.background = '';
+  renderColorPicker();
+  renderRatingInput();
+  // 默认一行季
+  document.getElementById('seasonEditList').innerHTML = '';
+  addSeasonRow();
+  showPage('page-edit');
+}
+
+function editAnime(id) {
+  if (animeManageMode) return;
+  const folder = getFolder(currentFolderId);
+  const item = folder.items.find(x => x.id === id);
+  if (!item) return;
+
+  editingAnimeId = id;
+  currentImage = item.image || '';
+  currentRating = item.rating || 0;
+  document.getElementById('editPageTitle').textContent = '编辑动漫';
+  document.getElementById('animeNameInput').value = item.name;
+  document.getElementById('imageUrlInput').value = item.image && !item.image.startsWith('data:') && !item.image.startsWith('color:') ? item.image : '';
+  document.getElementById('importText').value = '';
+  document.getElementById('importResult').classList.remove('show');
+
+  // 图片预览
+  const preview = document.getElementById('editImagePreview');
+  preview.style.background = '';
+  if (currentImage && currentImage.startsWith('color:')) {
+    preview.innerHTML = '';
+    preview.style.background = currentImage.substring(6);
+  } else if (currentImage) {
+    preview.innerHTML = `<img src="${currentImage}" onerror="this.parentElement.textContent='🎨'">`;
+  } else {
+    preview.innerHTML = '🎨';
+  }
+
+  renderColorPicker();
+  // 回显纯色选中
+  if (currentImage && currentImage.startsWith('color:')) {
+    const c = currentImage.substring(6);
+    document.querySelectorAll('.color-swatch').forEach(s => {
+      s.classList.toggle('selected', s.dataset.color === c);
+    });
+  }
+  renderRatingInput();
+
+  // 季信息
+  const list = document.getElementById('seasonEditList');
+  list.innerHTML = '';
+  if (item.seasons && item.seasons.length > 0) {
+    item.seasons.forEach(s => addSeasonRow(s));
+  } else {
+    addSeasonRow();
+  }
+
+  showPage('page-edit');
+}
+
+function addSeasonRow(data) {
+  const list = document.getElementById('seasonEditList');
+  const idx = list.children.length + 1;
+  const row = document.createElement('div');
+  row.className = 'season-edit-row';
+  row.innerHTML = `
+    <div class="season-edit-row-header">
+      <span class="season-edit-row-num">第 ${idx} 行</span>
+      <button class="season-remove-btn" onclick="this.closest('.season-edit-row').remove();renumberSeasons();">×</button>
+    </div>
+    <div class="season-fields">
+      <div class="season-field">
+        <label>第几季</label>
+        <input type="number" min="1" value="${data?.seasonNum ?? idx}" placeholder="1">
+      </div>
+      <div class="season-field">
+        <label>共几集</label>
+        <input type="number" min="0" value="${data?.episodes ?? 12}" placeholder="12">
+      </div>
+      <div class="season-field">
+        <label>每集分钟</label>
+        <input type="number" min="0" value="${data?.minutesPerEp ?? 24}" placeholder="24">
+      </div>
+      <div class="season-field">
+        <label>总时长(小时)</label>
+        <input type="text" value="${((data?.episodes ?? 12)*(data?.minutesPerEp ?? 24)/60).toFixed(1)}" readonly style="background:var(--bg); color:var(--primary-dark); font-weight:600;">
+      </div>
+    </div>
+  `;
+  // 联动计算
+  const inputs = row.querySelectorAll('input[type="number"]');
+  const hoursInput = row.querySelector('input[readonly]');
+  inputs.forEach(inp => {
+    inp.addEventListener('input', () => {
+      const ep = parseFloat(inputs[1].value) || 0;
+      const min = parseFloat(inputs[2].value) || 0;
+      hoursInput.value = (ep * min / 60).toFixed(1);
+    });
+  });
+  list.appendChild(row);
+  renumberSeasons();
+}
+
+function renumberSeasons() {
+  const list = document.getElementById('seasonEditList');
+  Array.from(list.children).forEach((row, i) => {
+    row.querySelector('.season-edit-row-num').textContent = `第 ${i+1} 行`;
+  });
+}
+
+function collectSeasons() {
+  const list = document.getElementById('seasonEditList');
+  const seasons = [];
+  Array.from(list.children).forEach(row => {
+    const inputs = row.querySelectorAll('input[type="number"]');
+    const seasonNum = parseInt(inputs[0].value) || 0;
+    const episodes = parseInt(inputs[1].value) || 0;
+    const minutesPerEp = parseInt(inputs[2].value) || 0;
+    if (seasonNum > 0) {
+      seasons.push({ seasonNum, episodes, minutesPerEp });
+    }
+  });
+  return seasons;
+}
+
+function saveAnime() {
+  const name = document.getElementById('animeNameInput').value.trim();
+  if (!name) { toast('请输入动漫名称'); return; }
+
+  const seasons = collectSeasons();
+  const folder = getFolder(currentFolderId);
+
+  if (editingAnimeId) {
+    const item = folder.items.find(x => x.id === editingAnimeId);
+    if (item) {
+      item.name = name;
+      item.image = currentImage;
+      item.seasons = seasons;
+      item.rating = currentRating;
+      item.modifiedAt = Date.now();
+    }
+    toast('已更新');
+  } else {
+    folder.items.push({
+      id: uid(),
+      name,
+      image: currentImage,
+      seasons,
+      rating: currentRating,
+      createdAt: Date.now(),
+      modifiedAt: Date.now()
+    });
+    toast('已添加');
+  }
+
+  touchFolder(folder);
+  saveData();
+  goAnimes();
+}
+
+// ==================== 图片处理 ====================
+function handleImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    toast('图片过大，请选择2MB以内的图片');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    currentImage = e.target.result;
+    document.getElementById('editImagePreview').innerHTML = `<img src="${currentImage}">`;
+    document.getElementById('editImagePreview').style.background = '';
+    document.getElementById('imageUrlInput').value = '';
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+    toast('图片已上传');
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+function previewImageFromUrl() {
+  const url = document.getElementById('imageUrlInput').value.trim();
+  const preview = document.getElementById('editImagePreview');
+  if (url) {
+    currentImage = url;
+    preview.style.background = '';
+    preview.innerHTML = `<img src="${url}" onerror="this.parentElement.textContent='🖼️'">`;
+    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  } else {
+    currentImage = '';
+    preview.innerHTML = '🎨';
+  }
+}
+
+function clearImage() {
+  currentImage = '';
+  document.getElementById('imageUrlInput').value = '';
+  document.getElementById('editImagePreview').innerHTML = '🎨';
+  document.getElementById('editImagePreview').style.background = '';
+  // 取消纯色选中
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+}
+
+// 渲染封面（支持纯色）
+function renderCoverImage(image) {
+  if (!image) return '🎬';
+  if (image.startsWith('color:')) {
+    const c = image.substring(6);
+    return `<div style="width:100%;height:100%;background:${c};"></div>`;
+  }
+  return `<img src="${image}" alt="cover" onerror="this.parentElement.textContent='🖼️'">`;
+}
+
+// 渲染纯色选择器
+function renderColorPicker() {
+  const picker = document.getElementById('colorPicker');
+  if (!picker) return;
+  const colors = getCoverColors();
+  picker.innerHTML = colors.map(c =>
+    `<div class="color-swatch" style="background:${c};" data-color="${c}" onclick="selectColor('${c}')"></div>`
+  ).join('');
+}
+
+function selectColor(color) {
+  currentImage = 'color:' + color;
+  document.getElementById('imageUrlInput').value = '';
+  const preview = document.getElementById('editImagePreview');
+  preview.innerHTML = '';
+  preview.style.background = color;
+  document.querySelectorAll('.color-swatch').forEach(s => {
+    s.classList.toggle('selected', s.dataset.color === color);
+  });
+}
+
+// 渲染星级输入
+function renderRatingInput() {
+  const container = document.getElementById('ratingInput');
+  if (!container) return;
+  const ch = getRatingChar();
+  container.innerHTML = Array.from({length:5},(_,i)=>
+    `<span class="star ${i<currentRating?'filled':''}" data-val="${i+1}" onclick="setRating(${i+1})">${ch}</span>`
+  ).join('');
+}
+
+function setRating(val) {
+  // 再点一次当前星则取消（设为val-1）
+  currentRating = (currentRating === val) ? val - 1 : val;
+  renderRatingInput();
+}
+
+// ===== 设置功能 =====
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) settings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+  } catch(e) { settings = { ...DEFAULT_SETTINGS }; }
+  // 兼容旧数据：字符串'md'等转为数字默认值
+  if (typeof settings.fontSize !== 'number') settings.fontSize = DEFAULT_SETTINGS.fontSize;
+  if (typeof settings.iconSize !== 'number') settings.iconSize = DEFAULT_SETTINGS.iconSize;
+}
+
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function applySettings() {
+  const root = document.documentElement;
+  // 字体大小（设为html基准，所有rem等比缩放）
+  root.style.fontSize = settings.fontSize + 'px';
+  // 字体族（CSS变量，全局继承）
+  const ff = FONT_FAMILIES.find(f=>f.id===settings.fontFamily) || FONT_FAMILIES[0];
+  root.style.setProperty('--font-family', ff.css);
+  // 图标大小（数字scale）
+  root.style.setProperty('--icon-scale', settings.iconSize);
+  // 主题色
+  const theme = THEME_COLORS.find(t=>t.id===settings.theme) || THEME_COLORS[0];
+  root.style.setProperty('--primary', theme.primary);
+  root.style.setProperty('--primary-light', theme.light);
+  root.style.setProperty('--primary-dark', theme.dark);
+  // 评分颜色
+  root.style.setProperty('--rating-color', settings.ratingColor);
+}
+
+function showSettings() {
+  renderSettingsPage();
+  showPage('page-settings');
+}
+
+function renderSettingsPage() {
+  // 文字大小（加减按钮 + 中文字号标注）
+  const cnName = getCnSizeName(settings.fontSize);
+  const sizeDisplay = cnName ? `${settings.fontSize}px · ${cnName}` : `${settings.fontSize}px`;
+  document.getElementById('fontSizeOptions').innerHTML = `
+    <div class="setting-option" onclick="adjustFont(-1)" style="font-size:1.2rem; font-weight:700; padding:8px 16px;">−</div>
+    <div class="setting-option" style="min-width:110px; justify-content:center; cursor:default; background:var(--primary-light); border-color:var(--primary); color:var(--primary-dark); font-weight:600;">${sizeDisplay}</div>
+    <div class="setting-option" onclick="adjustFont(1)" style="font-size:1.2rem; font-weight:700; padding:8px 16px;">＋</div>
+  `;
+  // 标准字号快速选择
+  document.getElementById('fontSizeQuick').innerHTML = CN_FONT_SIZES.map(s=>
+    `<div class="setting-option ${Math.abs(s.px-settings.fontSize)<0.1?'selected':''}" onclick="setFontSizePx(${s.px})" style="padding:6px 10px; font-size:0.8rem;">${s.name}</div>`
+  ).join('');
+  // 字体族
+  document.getElementById('fontFamilyOptions').innerHTML = FONT_FAMILIES.map(f=>
+    `<div class="setting-option ${settings.fontFamily===f.id?'selected':''}" onclick="setFontFamily('${f.id}')">${f.name}</div>`
+  ).join('');
+  // 图标大小（加减按钮）
+  const iconPct = Math.round(settings.iconSize * 100);
+  document.getElementById('iconSizeOptions').innerHTML = `
+    <div class="setting-option" onclick="adjustIcon(-1)" style="font-size:1.2rem; font-weight:700; padding:8px 16px;">−</div>
+    <div class="setting-option" style="min-width:70px; justify-content:center; cursor:default; background:var(--primary-light); border-color:var(--primary); color:var(--primary-dark); font-weight:600;">${iconPct}%</div>
+    <div class="setting-option" onclick="adjustIcon(1)" style="font-size:1.2rem; font-weight:700; padding:8px 16px;">＋</div>
+  `;
+  // 主题色
+  document.getElementById('themeColorPicker').innerHTML = THEME_COLORS.map(t=>
+    `<div class="color-swatch ${settings.theme===t.id?'selected':''}" style="background:${t.primary};" onclick="setTheme('${t.id}')" title="${t.name}"></div>`
+  ).join('');
+  // 色系
+  document.getElementById('colorSchemeOptions').innerHTML = Object.entries(COLOR_SCHEMES).map(([id,s])=>
+    `<div class="setting-option ${settings.colorScheme===id?'selected':''}" onclick="setColorScheme('${id}')">${s.name}</div>`
+  ).join('');
+  // 色系预览
+  const colors = getCoverColors();
+  document.getElementById('settingsColorPreview').innerHTML = colors.map(c=>
+    `<div class="color-swatch" style="background:${c}; width:26px; height:26px;"></div>`
+  ).join('');
+  // 评分图标
+  document.getElementById('ratingIconOptions').innerHTML = RATING_ICONS.map(i=>
+    `<div class="setting-option ${settings.ratingIcon===i.id?'selected':''}" onclick="setRatingIcon('${i.id}')" style="font-size:1.2rem;">${i.char} ${i.name}</div>`
+  ).join('');
+  // 评分颜色（从当前色系选）
+  document.getElementById('ratingColorPicker').innerHTML = colors.map(c=>
+    `<div class="color-swatch ${settings.ratingColor===c?'selected':''}" style="background:${c};" onclick="setRatingColor('${c}')"></div>`
+  ).join('');
+}
+
+function adjustFont(dir) {
+  const next = settings.fontSize + dir * FONT_RANGE.step;
+  if (next < FONT_RANGE.min || next > FONT_RANGE.max) return;
+  settings.fontSize = next;
+  saveSettings(); applySettings(); renderSettingsPage();
+}
+function setFontSizePx(px) {
+  settings.fontSize = px;
+  saveSettings(); applySettings(); renderSettingsPage();
+}
+function setFontFamily(id) {
+  settings.fontFamily = id;
+  saveSettings(); applySettings(); renderSettingsPage();
+}
+function adjustIcon(dir) {
+  const next = Math.round((settings.iconSize + dir * ICON_RANGE.step) * 100) / 100;
+  if (next < ICON_RANGE.min || next > ICON_RANGE.max) return;
+  settings.iconSize = next;
+  saveSettings(); applySettings(); renderSettingsPage();
+}
+function setTheme(id) { settings.theme = id; saveSettings(); applySettings(); renderSettingsPage(); }
+function setColorScheme(id) {
+  settings.colorScheme = id;
+  // 如果当前评分颜色不在新色系里，自动设为新色系第一个
+  const colors = getCoverColors();
+  if (!colors.includes(settings.ratingColor)) settings.ratingColor = colors[0];
+  saveSettings(); applySettings(); renderSettingsPage();
+  renderColorPicker();
+}
+function setRatingIcon(id) { settings.ratingIcon = id; saveSettings(); applySettings(); renderSettingsPage(); }
+function setRatingColor(color) { settings.ratingColor = color; saveSettings(); applySettings(); renderSettingsPage(); }
+function resetSettings() {
+  if (!confirm('确定恢复所有默认设置吗？')) return;
+  settings = { ...DEFAULT_SETTINGS };
+  saveSettings(); applySettings(); renderSettingsPage();
+  renderColorPicker();
+  toast('已恢复默认设置');
+}
+
+// ==================== 文字导入解析 ====================
+function parseImportText() {
+  const text = document.getElementById('importText').value.trim();
+  if (!text) { toast('请先粘贴文字'); return; }
+
+  const result = document.getElementById('importResult');
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+
+  // 尝试从第一行提取动漫名称
+  let detectedName = '';
+  const firstLine = lines[0];
+  // 名称通常在最前面，去掉季/集/分钟相关内容
+  const nameMatch = firstLine.match(/^(.+?)(?=\s*第[一二三四五六七八九十\d]+[季期]|\s*\d+\s*集|\s*全\d+集|\s*共\d+集|$)/);
+  if (nameMatch && nameMatch[1].trim().length > 1) {
+    detectedName = nameMatch[1].trim();
+  }
+
+  // 解析每一行的季信息
+  const seasons = [];
+  const cnNum = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10,'十一':11,'十二':12};
+
+  lines.forEach(line => {
+    // 匹配季数
+    let seasonNum = 0;
+    const sMatch = line.match(/第\s*([一二三四五六七八九十\d]+)\s*[季期]/);
+    if (sMatch) {
+      const raw = sMatch[1];
+      seasonNum = cnNum[raw] || parseInt(raw) || 0;
+    } else {
+      // 尝试 "X季" 格式
+      const sMatch2 = line.match(/(\d+)\s*季/);
+      if (sMatch2) seasonNum = parseInt(sMatch2[1]);
+    }
+
+    // 匹配集数
+    let episodes = 0;
+    const epMatch = line.match(/(\d+)\s*集/) || line.match(/全\s*(\d+)\s*集/) || line.match(/共\s*(\d+)\s*集/);
+    if (epMatch) episodes = parseInt(epMatch[1]);
+
+    // 匹配每集分钟
+    let minutes = 0;
+    const minMatch = line.match(/(\d+)\s*分钟/) || line.match(/每集\s*(\d+)/) || line.match(/(\d+)\s*min/i);
+    if (minMatch) minutes = parseInt(minMatch[1]);
+
+    if (seasonNum > 0) {
+      // 避免重复
+      if (!seasons.find(s => s.seasonNum === seasonNum)) {
+        seasons.push({ seasonNum, episodes, minutesPerEp: minutes });
+      }
+    }
+  });
+
+  // 如果没识别到季，尝试整体解析
+  if (seasons.length === 0) {
+    const epMatch = text.match(/(\d+)\s*集/);
+    const minMatch = text.match(/(\d+)\s*分钟/);
+    if (epMatch) {
+      seasons.push({ seasonNum: 1, episodes: parseInt(epMatch[1]), minutesPerEp: minMatch ? parseInt(minMatch[1]) : 0 });
+    }
+  }
+
+  // 填充到表单
+  if (detectedName && !document.getElementById('animeNameInput').value) {
+    document.getElementById('animeNameInput').value = detectedName;
+  }
+
+  if (seasons.length > 0) {
+    const list = document.getElementById('seasonEditList');
+    list.innerHTML = '';
+    seasons.forEach(s => addSeasonRow(s));
+  }
+
+  // 显示结果
+  let msg = `✅ 识别到 ${seasons.length} 季信息`;
+  if (detectedName) msg += `\n动漫名：${detectedName}`;
+  seasons.forEach(s => {
+    const h = (s.episodes * s.minutesPerEp / 60).toFixed(1);
+    msg += `\n第${s.seasonNum}季：${s.episodes}集 × ${s.minutesPerEp}分钟 = ${h}小时`;
+  });
+  result.textContent = msg;
+  result.classList.add('show');
+
+  if (seasons.length === 0) {
+    toast('未识别到季信息，请手动填写');
+  } else {
+    toast(`已导入 ${seasons.length} 季信息`);
+  }
+}
+
+// ==================== 工具函数 ====================
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// 点击弹窗外部关闭
+document.getElementById('newFolderModal').addEventListener('click', function(e) {
+  if (e.target === this) hideNewFolderModal();
+});
+
+// 回车创建文件夹
+document.getElementById('newFolderName').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') createFolder();
+});
+
+// ==================== 初始化 ====================
+loadData();
+loadSettings();
+applySettings();
+// 首次使用创建默认文件夹
+if (state.folders.length === 0) {
+  const now = Date.now();
+  state.folders.push({ id:uid(), name:'待看动漫', createdAt:now, modifiedAt:now, items:[] });
+  saveData();
+}
+renderFolders();
+</script>
+<script>
+// 注册 Service Worker，实现离线可用
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js').catch(function() {});
+  });
+}
+</script>
+</body>
+</html>
