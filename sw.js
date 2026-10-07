@@ -41,4 +41,3 @@ self.addEventListener('fetch', function(e) {
     })
   );
 });
-//（注：内容由AI生成）
